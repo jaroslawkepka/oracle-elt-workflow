@@ -50,7 +50,7 @@ podman run -d --name "${ORACLE_CONTAINER_NAME}" \
   -e ORACLE_PASSWORD="${ORACLE_PASSWORD}" \
   -e TZ="${ORACLE_TZ}" \
   -e ORA_SDTZ="${ORACLE_TZ}" \
-  -v "${ORACLE_VOLUME_NAME}:/opt/oracle/oradata" \
+  -v "${ORACLE_VOLUME_NAME}:/opt/oracle/oradata:Z" \
   -v "${REPO_ROOT}/extdata/inbound:/opt/oracle/extdata/inbound:ro,Z" \
   -v "${REPO_ROOT}/extdata/outbound:/opt/oracle/extdata/outbound:rw,Z" \
   -v "${REPO_ROOT}/extdata/work:/opt/oracle/extdata/work:rw,Z" \

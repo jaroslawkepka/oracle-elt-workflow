@@ -22,10 +22,12 @@ The current public scope has progressed through `Phase-07` with `aml_report_spoo
 - `RUN_AML_WORKFLOW` as a process-control workflow procedure for `clients -> transfers -> mart -> spool`
 - disabled `DWH.JOB_RUN_AML_WORKFLOW` scheduler job as an Oracle-native runner for the workflow procedure
 
-The documented run path targets a local Docker-based demo/sandbox environment.
+The documented run path targets a local rootless Podman demo/sandbox environment.
 
 ## Quick Start
 
+Linux with rootless Podman configured for the current user is required.
+Run as the user that owns the repository and its `extdata` directories.
 Replace `"<PROJECT_PATH>"` with the local path of this repository in every command below.
 
 1. Start Oracle Free from the repository root:
@@ -39,16 +41,15 @@ The helper prompts for `ORACLE_PASSWORD`.
 This is the Oracle container password.
 
 Startup defaults:
-- container name: `j-kepka-oracle-elt-workflow`
-- volume: `j-kepka-oracle-elt-workflow-data`
-- timezone: `Europe/Berlin`
 
-Current setup has been exercised on Linux-style environments and has not been validated on native Windows hosts yet.
+- container name: `oracle-elt-workflow`
+- volume: `oracle-elt-workflow-data`
+- timezone: `Europe/Berlin`
 
 2. Wait until the database is ready:
 
 ```bash
-docker logs -f j-kepka-oracle-elt-workflow
+podman logs -f oracle-elt-workflow
 ```
 
 3. Bootstrap the demo schema:
@@ -56,7 +57,7 @@ docker logs -f j-kepka-oracle-elt-workflow
 Run on the host:
 
 ```bash
-docker exec -it j-kepka-oracle-elt-workflow bash
+podman exec -it oracle-elt-workflow bash
 ```
 
 Then run inside the container:
@@ -81,25 +82,12 @@ DEFINE DWH_PASSWORD = '<DWH_PASSWORD>'
 Replace `<DWH_PASSWORD>` with the password chosen for the demo `dwh` schema.
 The same password is used later when connecting as `dwh`.
 
-4. Fix `extdata` permissions on the host:
+4. Run the end-to-end AML workflow smoke:
+
+Run on the host in another terminal:
 
 ```bash
-cd <PROJECT_PATH>
-
-ORACLE_UID=$(docker exec j-kepka-oracle-elt-workflow id -u oracle)
-ORACLE_GID=$(docker exec j-kepka-oracle-elt-workflow id -g oracle)
-
-sudo mkdir -p extdata/inbound extdata/outbound extdata/work
-sudo chown "${ORACLE_UID}:${ORACLE_GID}" extdata/outbound extdata/work
-sudo chmod 755 extdata extdata/inbound extdata/outbound
-sudo chmod 770 extdata/work
-sudo find extdata/inbound -maxdepth 1 -type f \( -name 'client_transfers_*.csv' -o -name 'client_transfers_*.ok' -o -name 'clients_*.csv' -o -name 'clients_*.ok' \) -exec chmod 644 {} \;
-```
-
-5. Run the end-to-end AML workflow smoke:
-
-```bash
-docker exec -it j-kepka-oracle-elt-workflow bash
+podman exec -it oracle-elt-workflow bash
 ```
 
 Then run inside the container:

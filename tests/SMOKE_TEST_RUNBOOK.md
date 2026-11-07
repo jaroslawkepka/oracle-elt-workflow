@@ -3,6 +3,7 @@
 Detailed bootstrap and validation steps for the current matrix-based smoke tests.
 
 Expected deterministic cases live in:
+
 - `tests/smoke_matrix.csv`
 
 The CSV is a tester helper only.
@@ -10,10 +11,8 @@ It is not used as runtime input by SQL.
 
 ## Prerequisites
 
-- Docker is installed and usable by the current local user.
-- The repository is available in a local clone path.
-- Current setup has been exercised on Linux-style environments.
-- Native Windows hosts have not been validated yet.
+- Linux with rootless Podman configured for the current local user.
+- A local clone of the repository, owned by that user together with its `extdata` directories.
 
 ## Warning
 
@@ -26,12 +25,14 @@ Use this flow only in the local demo/sandbox environment.
 ## Process Order Contract
 
 The default operational order is:
+
 1. `LOAD_CLIENTS`
 2. `LOAD_CLIENT_TRANSFERS`
 
 Transfer loads depend on the same-day client snapshot.
 Smoke helpers follow that order unless a case explicitly tests a missing dependency, such as `transfers_2026-04-11_manual`.
 The AML workflow procedure runs the full order as:
+
 1. `LOAD_CLIENTS`
 2. `LOAD_CLIENT_TRANSFERS`
 3. `BUILD_MART_TRANSFER_AML`
@@ -52,8 +53,9 @@ cd <PROJECT_PATH>
 The helper prompts for `ORACLE_PASSWORD`, which becomes the Oracle container password.
 
 Startup defaults:
-- container name: `j-kepka-oracle-elt-workflow`
-- volume: `j-kepka-oracle-elt-workflow-data`
+
+- container name: `oracle-elt-workflow`
+- volume: `oracle-elt-workflow-data`
 - timezone: `Europe/Berlin`
 
 To override defaults for one run, prefix the start command:
@@ -65,18 +67,24 @@ ORACLE_VOLUME_NAME='<VOLUME_NAME>' \
 ./ops/00_start_oracle_container.sh
 ```
 
+The helper creates a container and exits if that name already exists.
+To resume an existing container, run `podman start oracle-elt-workflow` and continue with the readiness check.
+
 Wait until the database is ready:
 
 ```bash
-docker logs -f j-kepka-oracle-elt-workflow
+podman logs -f oracle-elt-workflow
 ```
+
+Wait for `DATABASE IS READY TO USE!`, then press `Ctrl+C` to stop following logs and return to the host shell.
+The database container keeps running.
 
 ## 2. Reset And Bootstrap The Schema
 
 Run on the host:
 
 ```bash
-docker exec -it j-kepka-oracle-elt-workflow bash
+podman exec -it oracle-elt-workflow bash
 ```
 
 Then run inside the container:
@@ -96,39 +104,26 @@ DEFINE DWH_PASSWORD = '<DWH_PASSWORD>'
 
 This resets project-specific objects and recreates the `dwh` schema plus current demo objects.
 It is destructive for the local demo schema and should be used only in the local sandbox flow.
+Replace `<DWH_PASSWORD>` with the password chosen for `dwh`; use the same password for later connections.
 
-## 3. Fix `extdata` Permissions
+## 3. Directory Access
 
-This permission setup is a sandbox compatibility baseline for local Docker bind mounts.
-It is not a production permission model.
+Startup creates missing `extdata/inbound`, `extdata/outbound`, and `extdata/work` directories and maps the host user to the container's `oracle` user (`54321:54321`).
+Bind mounts use `:Z` for SELinux labeling.
 
-Run on the host:
+Access inside the container:
 
-```bash
-cd <PROJECT_PATH>
-
-ORACLE_UID=$(docker exec j-kepka-oracle-elt-workflow id -u oracle)
-ORACLE_GID=$(docker exec j-kepka-oracle-elt-workflow id -g oracle)
-
-sudo mkdir -p extdata/inbound extdata/outbound extdata/work
-sudo chown "${ORACLE_UID}:${ORACLE_GID}" extdata/outbound extdata/work
-sudo chmod 755 extdata extdata/inbound extdata/outbound
-sudo chmod 770 extdata/work
-sudo find extdata/inbound -maxdepth 1 -type f \( -name 'client_transfers_*.csv' -o -name 'client_transfers_*.ok' -o -name 'clients_*.csv' -o -name 'clients_*.ok' \) -exec chmod 644 {} \;
-```
-
-Expected result:
-- Oracle can read dated CSV and `.ok` files in `extdata/inbound/`.
-- Oracle can write AML report spool export files into `extdata/outbound/`.
-- Oracle can write loader artifacts into `extdata/work/`.
-- The repository remains mounted read-only to `/workspace` inside the container.
+- `extdata/inbound/` is mounted read-only at `/opt/oracle/extdata/inbound`; Oracle can read the dated CSV and `.ok` files.
+- `extdata/outbound/` is writable at `/opt/oracle/extdata/outbound` for AML report spool export files.
+- `extdata/work/` is writable at `/opt/oracle/extdata/work` for loader artifacts.
+- The repository is mounted read-only at `/workspace`.
 
 ## 4. Run The Deterministic Smoke Flow
 
-Run on the host:
+Run on the host in another terminal:
 
 ```bash
-docker exec -it j-kepka-oracle-elt-workflow bash
+podman exec -it oracle-elt-workflow bash
 ```
 
 Then run inside the container:
@@ -148,9 +143,12 @@ ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD';
 ```
 
 Use this order for loader-level regression evidence:
+
 - `90_manual_smoke_run.sql` executes the deterministic scenarios and resets covered dates before loading them again.
 - `91_manual_smoke_actuals.sql` exposes the current database state for review.
 - `92_manual_smoke_compare.sql` is the objective `PASS` / `FAIL` gate for the deterministic matrix.
+
+Continue in the same `SQL>` session for the remaining SQL snippets in this runbook.
 
 Additional manual detail checks:
 
@@ -261,7 +259,7 @@ Current AML input contract notes:
 - `expected_activity_level`: `LOW`, `MEDIUM`, `HIGH`, `VERY_HIGH`, `UNKNOWN`
 - `source_of_funds_declared`, `source_of_wealth_declared`, and `transfer_title` remain trimmed descriptive fields with max length `255`
 
-If a custom container name is used, replace `j-kepka-oracle-elt-workflow` with that name.
+If a custom container name is used, replace `oracle-elt-workflow` with that name.
 The expected status, reason, and row-count matrix is asserted by `92_manual_smoke_compare.sql`.
 
 ## What Each Script Proves
